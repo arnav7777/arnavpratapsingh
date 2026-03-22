@@ -4,7 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - 'portfolio.html' 
+      - 'portfolio.html'
+
+permissions:
+  contents: write
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -29,10 +33,8 @@ jobs:
 
           let html = fs.readFileSync('portfolio.html', 'utf8');
 
-          // Strip comments
           html = html.replace(/<!--[\s\S]*?-->/g, '');
 
-          // Obfuscate all <script> blocks
           html = html.replace(/<script>([\s\S]*?)<\/script>/g, (match, script) => {
             if (!script.trim()) return match;
             try {
@@ -73,10 +75,8 @@ jobs:
             }
           });
 
-          // Add devtools blocker
           const blocker = `<script>
           (function(){
-            var d=function(){};
             var t=new Date();
             debugger;
             if(new Date()-t>100){
@@ -90,9 +90,7 @@ jobs:
           })();
           </script>`;
 
-          // Minify
           html = html.replace(/\n\s*\n/g, '\n').replace(/^\s+/gm, '').replace(/\s{2,}/g, ' ').replace(/>\s+</g, '><');
-
           html = html.replace('<body>', '<body>' + blocker);
 
           fs.writeFileSync('index.html', html);
@@ -108,4 +106,3 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./
           publish_branch: gh-pages
-          include_files: index.html
