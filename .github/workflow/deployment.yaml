@@ -1,0 +1,111 @@
+name: Obfuscate & Deploy Portfolio
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'portfolio.html' 
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install obfuscator
+        run: npm install javascript-obfuscator
+
+      - name: Create obfuscate script
+        run: |
+          cat << 'EOF' > obfuscate.js
+          const JavaScriptObfuscator = require('javascript-obfuscator');
+          const fs = require('fs');
+
+          let html = fs.readFileSync('portfolio.html', 'utf8');
+
+          // Strip comments
+          html = html.replace(/<!--[\s\S]*?-->/g, '');
+
+          // Obfuscate all <script> blocks
+          html = html.replace(/<script>([\s\S]*?)<\/script>/g, (match, script) => {
+            if (!script.trim()) return match;
+            try {
+              const result = JavaScriptObfuscator.obfuscate(script, {
+                compact: true,
+                controlFlowFlattening: true,
+                controlFlowFlatteningThreshold: 0.9,
+                deadCodeInjection: true,
+                deadCodeInjectionThreshold: 0.5,
+                debugProtection: true,
+                debugProtectionInterval: 4000,
+                disableConsoleOutput: true,
+                identifierNamesGenerator: 'hexadecimal',
+                numbersToExpressions: true,
+                renameGlobals: false,
+                selfDefending: true,
+                splitStrings: true,
+                splitStringsChunkLength: 5,
+                stringArray: true,
+                stringArrayCallsTransform: true,
+                stringArrayCallsTransformThreshold: 0.75,
+                stringArrayEncoding: ['rc4'],
+                stringArrayIndexShift: true,
+                stringArrayRotate: true,
+                stringArrayShuffle: true,
+                stringArrayWrappersCount: 5,
+                stringArrayWrappersChainedCalls: true,
+                stringArrayWrappersParametersMaxCount: 5,
+                stringArrayWrappersType: 'function',
+                stringArrayThreshold: 0.9,
+                transformObjectKeys: true,
+                unicodeEscapeSequence: true,
+              });
+              return `<script>${result.getObfuscatedCode()}</script>`;
+            } catch(e) {
+              console.log('Warning: ' + e.message);
+              return match;
+            }
+          });
+
+          // Add devtools blocker
+          const blocker = `<script>
+          (function(){
+            var d=function(){};
+            var t=new Date();
+            debugger;
+            if(new Date()-t>100){
+              document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#05030f;color:#a78bfa;font-family:monospace;font-size:1.2rem;flex-direction:column;gap:16px;"><div style="font-size:3rem;">🔒</div><div>DevTools access is restricted.</div></div>';
+              setInterval(function(){var s=new Date();debugger;if(new Date()-s>100){document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#05030f;color:#a78bfa;font-family:monospace;font-size:1.2rem;flex-direction:column;gap:16px;"><div style="font-size:3rem;">🔒</div><div>DevTools access is restricted.</div></div>';}},1000);
+            }
+            document.addEventListener('contextmenu',function(e){e.preventDefault();});
+            document.addEventListener('keydown',function(e){
+              if(e.keyCode===123||(e.ctrlKey&&e.shiftKey&&(e.keyCode===73||e.keyCode===74||e.keyCode===67))||(e.ctrlKey&&e.keyCode===85)){e.preventDefault();return false;}
+            });
+          })();
+          </script>`;
+
+          // Minify
+          html = html.replace(/\n\s*\n/g, '\n').replace(/^\s+/gm, '').replace(/\s{2,}/g, ' ').replace(/>\s+</g, '><');
+
+          html = html.replace('<body>', '<body>' + blocker);
+
+          fs.writeFileSync('index.html', html);
+          console.log('Done! Size: ' + (html.length/1024).toFixed(1) + ' KB');
+          EOF
+
+      - name: Run obfuscator
+        run: node obfuscate.js
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          publish_branch: gh-pages
+          include_files: index.html
